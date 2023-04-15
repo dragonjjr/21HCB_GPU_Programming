@@ -1,1 +1,2 @@
 Link task: https://docs.google.com/spreadsheets/d/1yGNDH3xrhIkPFxkI0ioa735Nk0l_E8MH2XSlNg3R5rE/edit?usp=sharing
+Link file notebook: https://colab.research.google.com/drive/1mbgN0V1JPKuaCf-DKMcSy5EywPhkkeSY?authuser=1#scrollTo=LJGhpPcAJryf
