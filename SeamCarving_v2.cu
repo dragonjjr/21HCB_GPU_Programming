@@ -56,75 +56,59 @@ struct GpuTimer
     }
 };
 
-void readPnm(char * fileName, 
-    int &numChannels, int &width, int &height, uint8_t * &pixels)
+void readPnm(char * fileName, int &width, int &height, uchar3 * &pixels)
 {
-    FILE * f = fopen(fileName, "r");
-    if (f == NULL)
-    {
-        printf("Cannot read %s\n", fileName);
-        exit(EXIT_FAILURE);
-    }
+	FILE * f = fopen(fileName, "r");
+	if (f == NULL)
+	{
+		printf("Cannot read %s\n", fileName);
+		exit(EXIT_FAILURE);
+	}
 
-    char type[3];
-    fscanf(f, "%s", type);
-    if (strcmp(type, "P2") == 0)
-        numChannels = 1;
-    else if (strcmp(type, "P3") == 0)
-        numChannels = 3;
-    else // In this exercise, we don't touch other types
-    {
-        fclose(f);
-        printf("Cannot read %s\n", fileName); 
-        exit(EXIT_FAILURE); 
-    }
+	char type[3];
+	fscanf(f, "%s", type);
+	
+	if (strcmp(type, "P3") != 0) // In this exercise, we don't touch other types
+	{
+		fclose(f);
+		printf("Cannot read %s\n", fileName); 
+		exit(EXIT_FAILURE); 
+	}
 
-    fscanf(f, "%i", &width);
-    fscanf(f, "%i", &height);
+	fscanf(f, "%i", &width);
+	fscanf(f, "%i", &height);
+	
+	int max_val;
+	fscanf(f, "%i", &max_val);
+	if (max_val > 255) // In this exercise, we assume 1 byte per value
+	{
+		fclose(f);
+		printf("Cannot read %s\n", fileName); 
+		exit(EXIT_FAILURE); 
+	}
 
-    int max_val;
-    fscanf(f, "%i", &max_val);
-    if (max_val > 255) // In this exercise, we assume 1 byte per value
-    {
-        fclose(f);
-        printf("Cannot read %s\n", fileName); 
-        exit(EXIT_FAILURE); 
-    }
+	pixels = (uchar3 *)malloc(width * height * sizeof(uchar3));
+	for (int i = 0; i < width * height; i++)
+		fscanf(f, "%hhu%hhu%hhu", &pixels[i].x, &pixels[i].y, &pixels[i].z);
 
-    pixels = (uint8_t *)malloc(width * height * numChannels);
-    for (int i = 0; i < width * height * numChannels; i++)
-        fscanf(f, "%hhu", &pixels[i]);
-
-    fclose(f);
+	fclose(f);
 }
 
-void writePnm(uint8_t * pixels, int numChannels, int width, int height, 
-    char * fileName) 
+void writePnm(uchar3 * pixels, int width, int height, char * fileName)
 {
-    FILE * f = fopen(fileName, "w");
-    if (f == NULL)
-    {
-        printf("Cannot write %s\n", fileName);
-        exit(EXIT_FAILURE);
-    }	
+	FILE * f = fopen(fileName, "w");
+	if (f == NULL)
+	{
+		printf("Cannot write %s\n", fileName);
+		exit(EXIT_FAILURE);
+	}	
 
-    if (numChannels == 1)
-        fprintf(f, "P2\n");
-    else if (numChannels == 3)
-        fprintf(f, "P3\n");
-    else
-    {
-        fclose(f);
-        printf("Cannot write %s\n", fileName);
-        exit(EXIT_FAILURE);
-    }
+	fprintf(f, "P3\n%i\n%i\n255\n", width, height); 
 
-    fprintf(f, "%i\n%i\n255\n", width, height); 
-
-    for (int i = 0; i < width * height * numChannels; i++)
-        fprintf(f, "%hhu\n", pixels[i]);
-
-    fclose(f);
+	for (int i = 0; i < width * height; i++)
+		fprintf(f, "%hhu\n%hhu\n%hhu\n", pixels[i].x, pixels[i].y, pixels[i].z);
+	
+	fclose(f);
 }
 
 void printDeviceInfo() 
@@ -144,7 +128,7 @@ void printDeviceInfo()
 }
 
 // Convolution
-void convolution(uint8_t *inPixels, int width, int height, int *outPixels, const int *filter) 
+void convolution(int *inPixels, int width, int height, int *outPixels, const int *filter) 
 {
     for (int outPixelsR = 0; outPixelsR < height; outPixelsR++)
     {
@@ -160,7 +144,7 @@ void convolution(uint8_t *inPixels, int width, int height, int *outPixels, const
                     int inPixelsC = outPixelsC - FILTER_WIDTH/2 + filterC;
                     inPixelsR = min(max(0, inPixelsR), height - 1);
                     inPixelsC = min(max(0, inPixelsC), width - 1);
-                    uint8_t inPixel = inPixels[inPixelsR*width + inPixelsC];
+                    int inPixel = inPixels[inPixelsR*width + inPixelsC];
                     outPixel += filterVal * inPixel;
                 }
             }
@@ -169,22 +153,22 @@ void convolution(uint8_t *inPixels, int width, int height, int *outPixels, const
     }
 }
 
-void convertRgb2Gray (uint8_t *inPixels, int width, int height, uint8_t *outPixels){
+void convertRgb2Gray (uchar3 *inPixels, int width, int height, int *outPixels){
   	for (int r = 0; r < height; r++)
 	{
 		for (int c = 0; c < width; c++)
 		{
 			int i = r * width + c;
-			outPixels[i] = 0.299f*inPixels[3*i] + 0.587f*inPixels[3*i + 1] + 0.114f*inPixels[3*i + 2];
+			outPixels[i] = 0.299f*inPixels[i].x + 0.587f*inPixels[i].y + 0.114f*inPixels[i].z;
 		}
 	}
 }
 
 // Tìm độ quan trọng của mỗi pixel (edge detection)
-void edgeDetection(uint8_t *inPixels, int width, int height, uint *importancePixels) 
+void edgeDetection(uchar3 *inPixels, int width, int height, int *importancePixels) 
 {
     // Chuyển ảnh RGB sang ảnh grayscale: gray = 0.299*red + 0.587*green + 0.114*blue 
-    uint8_t *grayPixels = (uint8_t*)malloc(width*height*sizeof(uint8_t));
+    int *grayPixels = (int*)malloc(width*height*sizeof(int));
     convertRgb2Gray(inPixel, width, height, grayPixels);
 
     // Phát hiện cạnh theo chiều x: Convolution với bộ lọc x-sobel
@@ -206,9 +190,9 @@ void edgeDetection(uint8_t *inPixels, int width, int height, uint *importancePix
 }
 
 // Tìm seam ít quan trọng nhất
-void findLeastImportantSeam(uint *importancePixels, int width, int height, int *seam)
+void findLeastImportantSeam(int *importancePixels, int width, int height, int *seam)
 {
-    uint *importanceOfSeams = importancePixels;
+    int *importanceOfSeams = importancePixels;
     int *trace = (int*)malloc(width*(height - 1)*sizeof(int)); // bỏ trace của dòng cuối
 
     // Tính độ quan trọng ít nhất tính tới dưới cùng
@@ -255,7 +239,7 @@ void findLeastImportantSeam(uint *importancePixels, int width, int height, int *
 }
 
 // Xóa seam
-void removeSeam(uint8_t *pixels, int width, int height, int *seam)
+void removeSeam(int *pixels, int width, int height, int *seam)
 {
     for (int i = 0; i < height - 1; i++)
     {
@@ -270,16 +254,16 @@ void removeSeam(uint8_t *pixels, int width, int height, int *seam)
 }
 
 // Seam carving by host
-void seamCarvingByHost(uint8_t *inPixels, int width, int height, uint8_t *outPixels, int newWidth)
+void seamCarvingByHost(int *inPixels, int width, int height, int *outPixels, int newWidth)
 {
-    uint *importancePixels = (uint*)malloc(width*height*sizeof(uint));
+    int *importancePixels = (int*)malloc(width*height*sizeof(int));
     int *seam = (int*)malloc(height*sizeof(int));
 
-    memcpy(outPixels, inPixels, 3*width*height*sizeof(uint8_t));
+    memcpy(outPixels, inPixels, 3*width*height*sizeof(int));
 
     while (width > newWidth)
     {
-        importancePixels = (uint*)realloc(importancePixels, width*height*sizeof(uint));
+        importancePixels = (int*)realloc(importancePixels, width*height*sizeof(int));
 
         // Tìm độ quan trọng của mỗi pixel (edge detection)
         edgeDetection(outPixels, width, height, importancePixels);
@@ -306,8 +290,8 @@ void seamCarvingByHost(uint8_t *inPixels, int width, int height, uint8_t *outPix
 }
 
 // Seam Carving
-void seamCarving(uint8_t *inPixels, int width, int height,
-    uint8_t* outPixels, int newWidth,
+void seamCarving(int *inPixels, int width, int height,
+    int* outPixels, int newWidth,
     bool useDevice=false, dim3 blockSize=dim3(1)) 
 {
     GpuTimer timer;
@@ -362,7 +346,7 @@ int main(int argc, char ** argv)
 
 	// Read input RGB image file
 	int numChannels, width, height;
-	uint8_t * inPixels;
+	int * inPixels;
 	readPnm(argv[2], numChannels, width, height, inPixels);
 	if (numChannels != 3)
 		return EXIT_FAILURE; // Input image must be RGB
@@ -370,7 +354,7 @@ int main(int argc, char ** argv)
 
     // Seam Carving not using device
     int newWidth = atoi(argv[1]);
-	uint8_t * correctOutPixels= (uint8_t *)malloc(3 * width * height);
+	int * correctOutPixels= (int *)malloc(3 * width * height);
 	seamCarving(inPixels, width, height, correctOutPixels, newWidth);
 
 	// Seam Carving using device
