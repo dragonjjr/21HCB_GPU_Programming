@@ -180,6 +180,7 @@ void getPixelsImportance (int *in, int width, int height, int *xFilter, int *yFi
     }
 }
 
+//Lấy pixels có độ quan trọng thấp nhất
 void getLeastImportantPixels (int *in, int width, int height, int *out){
     int lastRow = (height - 1) * width;
     memcpy(out + lastRow, in + lastRow, width * sizeof(int));
@@ -201,7 +202,8 @@ void getLeastImportantPixels (int *in, int width, int height, int *out){
     }
 }
 
-void getSeamAt (int *in, int width, int height, int *out, int col){
+//Lấy seam
+void getSeam(int *in, int width, int height, int *out, int col){
     out[0] = col;
 
     for (int row = 1; row < height; row++){
@@ -229,13 +231,14 @@ void getSeamAt (int *in, int width, int height, int *out, int col){
     }
 }
 
+//Lấy seam có độ quan trọng thấp nhất
 void getLeastImportantSeam (int *in, int width, int height, int *out){
     int minCol = 0;
     for (int i = 0; i < width; i++){
         if (in[i] < in[minCol])
         minCol = i;
     }
-    getSeamAt(in, width, height, out, minCol);
+    getSeam(in, width, height, out, minCol);
 }
 
 void removeSeam (const uchar3 *in, int width, int height, uchar3 *out, int *seam){

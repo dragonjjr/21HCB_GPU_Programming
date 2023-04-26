@@ -153,6 +153,7 @@ void convertRgbToGray (const uchar3 *in, int n, int *out){
     }
 }
 
+//-------------------------------------------------------Hàm trên host---------------------------------------------------------//
 //Tính độ quan trọng của Pixels
 void getPixelsImportance (int *in, int width, int height, int *xFilter, int *yFilter, int filterWidth, int *out){
     int margin = filterWidth / 2;
@@ -180,6 +181,7 @@ void getPixelsImportance (int *in, int width, int height, int *xFilter, int *yFi
     }
 }
 
+//Lấy pixels có độ quan trọng thấp nhất
 void getLeastImportantPixels (int *in, int width, int height, int *out){
     int lastRow = (height - 1) * width;
     memcpy(out + lastRow, in + lastRow, width * sizeof(int));
@@ -201,7 +203,8 @@ void getLeastImportantPixels (int *in, int width, int height, int *out){
     }
 }
 
-void getSeamAt (int *in, int width, int height, int *out, int col){
+//Lấy seam
+void getSeam(int *in, int width, int height, int *out, int col){
     out[0] = col;
 
     for (int row = 1; row < height; row++){
@@ -229,13 +232,14 @@ void getSeamAt (int *in, int width, int height, int *out, int col){
     }
 }
 
+//Lấy seam có độ quan trọng thấp nhất
 void getLeastImportantSeam (int *in, int width, int height, int *out){
     int minCol = 0;
     for (int i = 0; i < width; i++){
         if (in[i] < in[minCol])
         minCol = i;
     }
-    getSeamAt(in, width, height, out, minCol);
+    getSeam(in, width, height, out, minCol);
 }
 
 void removeSeam (const uchar3 *in, int width, int height, uchar3 *out, int *seam){
@@ -275,6 +279,7 @@ void seamCarvingOnHost(const uchar3 *in, int width, int height, uchar3 *out, int
     free(leastImportantSeam);
 }
 
+//-----------------------------------------------------Hàm kernel------------------------------------------------------//
 __global__ void convertRgbToGrayKernel(uchar3 *in, int width, int height, int *out){
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -330,6 +335,32 @@ __global__ void getLeastImportantPixelsKernel (int *in, int width, int row, int 
 
     }
 }
+
+//Tìm seam có độ quan trọng nhỏ nhất trên device
+__global__ void getLeastImportantSeamKernel (int *in, int width, int *out){
+    extern __shared__ int s_mem[];
+    int i = (blockDim.x * blockIdx.x + threadIdx.x) * 2;
+    if (i < width)
+      s_mem[threadIdx.x] = i;
+    if (i + 1 < width)
+      s_mem[threadIdx.x + 1] = i + 1;
+    __syncthreads();
+  
+    for (int stride = 1; stride < 2 * blockDim.x; stride *= 2){
+      if (threadIdx.x % stride == 0){
+        if (i + stride < width){
+          if (in[s_mem[threadIdx.x]] > in[s_mem[threadIdx.x + stride]]){
+            s_mem[threadIdx.x] = s_mem[threadIdx.x + stride];
+          }
+        }
+      }
+      __syncthreads();
+    }
+  
+    if (threadIdx.x == 0){
+      out[blockIdx.x] = s_mem[0];
+    }
+  }
 
 void seamCarvingOnDevice(const uchar3 *in, int width, int height, uchar3 *out, int *xFilter, int *yFilter, int filterWidth, dim3 blockSize){
     int lastRowIdx = (height - 1) * width;
