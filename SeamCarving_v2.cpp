@@ -103,41 +103,42 @@ void writePnm (const uchar3 *pixels, int width, int height, char *fileName){
 	fclose(f);
 }
 
+//Tạo bộ lọc
 void initSobelFilter(int *filter, bool horizontal){
 
     int filterWidth = FILTER_WIDTH;
     int val = 0;
-    int margin = filterWidth / 2;
+    int radius = filterWidth / 2;
 
     for (int filterR = 0; filterR < filterWidth; filterR++){
 
         for (int filterC = 0; filterC < filterWidth; filterC++){
 
         if (horizontal == true){
-            if (filterC < margin){
+            if (filterC < radius){
             val = 1;
             }
-            else if (filterC == margin){
+            else if (filterC == radius){
             val = 0;
             }
             else{
             val = -1;
             }
-            if (filterR == margin){
+            if (filterR == radius){
             val *= 2;
             }
         }
         else{
-            if (filterR < margin){
+            if (filterR < radius){
             val = 1;
             }
-            else if (filterR == margin){
+            else if (filterR == radius){
             val = 0;
             }
             else{
             val = -1;
             }
-            if (filterC == margin){
+            if (filterC == radius){
             val *= 2;
             }
         }
@@ -147,44 +148,44 @@ void initSobelFilter(int *filter, bool horizontal){
     }
 }
 
-void convertRgbToGray (const uchar3 *in, int n, int *out){
+void convertRgbToGray (const uchar3 *inPixels, int n, int *outPixels){
     for (int i = 0; i < n; i++){
-        out[i] = 0.299f * in[i].x + 0.587f * in[i].y + 0.114f * in[i].z;
+        outPixels[i] = 0.299f * inPixels[i].x + 0.587f * inPixels[i].y + 0.114f * inPixels[i].z;
     }
 }
 
 //-------------------------------------------------------Hàm trên host---------------------------------------------------------//
 //Tính độ quan trọng của Pixels
-void getPixelsImportance (int *in, int width, int height, int *xFilter, int *yFilter, int filterWidth, int *out){
-    int margin = filterWidth / 2;
+void calPixelsImportance (int *inPixels, int width, int height, int *xFilter, int *yFilter, int filterWidth, int *outPixels){
+    int radius = filterWidth / 2;
     for (int col = 0; col < width; col++){
         for (int row = 0; row < height; row++){
 
         int curIdx = row * width + col;
         float xSum = 0, ySum = 0;
 
-        for (int filterRow = -margin; filterRow <= margin; filterRow++){
-            for (int filterCol = -margin; filterCol <= margin; filterCol++){
-            int filterIdx = (filterRow + margin) * filterWidth + filterCol + margin;
+        for (int filterRow = -radius; filterRow <= radius; filterRow++){
+            for (int filterCol = -radius; filterCol <= radius; filterCol++){
+            int filterIdx = (filterRow + radius) * filterWidth + filterCol + radius;
 
             int dx = min(width - 1, max(0, col + filterCol));
             int dy = min(height - 1, max(0, row + filterRow));
 
             int idx = dy * width + dx;
-            xSum += in[idx] * xFilter[filterIdx];
-            ySum += in[idx] * yFilter[filterIdx];
+            xSum += inPixels[idx] * xFilter[filterIdx];
+            ySum += inPixels[idx] * yFilter[filterIdx];
             }
         }
 
-        out[curIdx] = abs(xSum) + abs(ySum);
+        outPixels[curIdx] = abs(xSum) + abs(ySum);
         }
     }
 }
 
 //Lấy pixels có độ quan trọng thấp nhất
-void getLeastImportantPixels (int *in, int width, int height, int *out){
+void getLeastImportancePixels (int *inPixels, int width, int height, int *outPixels){
     int lastRow = (height - 1) * width;
-    memcpy(out + lastRow, in + lastRow, width * sizeof(int));
+    memcpy(outPixels + lastRow, inPixels + lastRow, width * sizeof(int));
 
     for (int row = height - 2; row >= 0; row--){
         int below = row + 1;
@@ -198,17 +199,17 @@ void getLeastImportantPixels (int *in, int width, int height, int *out){
         int belowIdx = below * width + col;
         int leftBelowIdx = below * width + leftCol;
         int rightBelowIdx = below * width + rightCol;
-        out[idx] = min(out[belowIdx], min(out[leftBelowIdx], out[rightBelowIdx])) + in[idx];
+        outPixels[idx] = min(outPixels[belowIdx], min(outPixels[leftBelowIdx], outPixels[rightBelowIdx])) + inPixels[idx];
         }
     }
 }
 
 //Lấy seam
-void getSeam(int *in, int width, int height, int *out, int col){
-    out[0] = col;
+void getSeam(int *inPixels, int width, int height, int *outPixels, int col){
+    outPixels[0] = col;
 
     for (int row = 1; row < height; row++){
-        int col = out[row - 1];
+        int col = outPixels[row - 1];
         int idx = row * width + col;
 
         int leftCol = max(0, col - 1);
@@ -217,60 +218,60 @@ void getSeam(int *in, int width, int height, int *out, int col){
         int leftIdx = row * width + leftCol;
         int rightIdx = row * width + rightCol;
 
-        if (in[leftIdx] < in[idx]){
-        if (in[leftIdx] < in[rightIdx])
-            out[row] = leftCol;
+        if (inPixels[leftIdx] < inPixels[idx]){
+        if (inPixels[leftIdx] < inPixels[rightIdx])
+            outPixels[row] = leftCol;
         else
-            out[row] = rightCol;
+            outPixels[row] = rightCol;
         }
         else{
-        if (in[idx] < in[rightIdx])
-            out[row] = col;
+        if (inPixels[idx] < inPixels[rightIdx])
+            outPixels[row] = col;
         else
-            out[row] = rightCol;
+            outPixels[row] = rightCol;
         }
     }
 }
 
 //Lấy seam có độ quan trọng thấp nhất
-void getLeastImportantSeam (int *in, int width, int height, int *out){
+void getLeastImportanceSeam (int *inPixels, int width, int height, int *outPixels){
     int minCol = 0;
     for (int i = 0; i < width; i++){
-        if (in[i] < in[minCol])
+        if (inPixels[i] < inPixels[minCol])
         minCol = i;
     }
-    getSeam(in, width, height, out, minCol);
+    getSeam(inPixels, width, height, outPixels, minCol);
 }
 
-void removeSeam (const uchar3 *in, int width, int height, uchar3 *out, int *seam){
+void removeSeam (const uchar3 *inPixels, int width, int height, uchar3 *outPixels, int *seam){
     int newWidth = width - 1;
     for (int row = 0; row < height; row++){
         int col = seam[row];
-        memcpy(out + row * newWidth, in + row * width, col * sizeof(uchar3));
+        memcpy(outPixels + row * newWidth, inPixels + row * width, col * sizeof(uchar3));
 
         int nextIdxOut = row * newWidth + col;
         int nextIdxIn = row * width + col + 1;
-        memcpy(out + nextIdxOut, in + nextIdxIn, (newWidth - col) * sizeof(uchar3));
+        memcpy(outPixels + nextIdxOut, inPixels + nextIdxIn, (newWidth - col) * sizeof(uchar3));
     }
 }
 
-void seamCarvingOnHost(const uchar3 *in, int width, int height, uchar3 *out, int *xFilter, int *yFilter, int filterWidth){
+void seamCarvingOnHost(const uchar3 *inPixels, int width, int height, uchar3 *outPixels, int *xFilter, int *yFilter, int filterWidth){
     //Chuyển ảnh về grayscale
     int *grayScalePixels = (int *)malloc(width * height * sizeof(int));
-    convertRgbToGray(in, width * height, grayScalePixels);
+    convertRgbToGray(inPixels, width * height, grayScalePixels);
 
     //Edge detection
     int *pixelsImportance = (int *)malloc(width * height * sizeof(int));
-    getPixelsImportance(grayScalePixels, width, height, xFilter, yFilter, filterWidth, pixelsImportance);
+    calPixelsImportance(grayScalePixels, width, height, xFilter, yFilter, filterWidth, pixelsImportance);
 
     //Tìm seam ít quan trọng nhất
     int *leastPixelsImportance = (int *)malloc(width * height * sizeof(int));
-    getLeastImportantPixels(pixelsImportance, width, height, leastPixelsImportance);
+    getLeastImportancePixels(pixelsImportance, width, height, leastPixelsImportance);
     int *leastImportantSeam = (int *)malloc(height * sizeof(int));
-    getLeastImportantSeam(leastPixelsImportance, width, height, leastImportantSeam);
+    getLeastImportanceSeam(leastPixelsImportance, width, height, leastImportantSeam);
 
     //Xóa seam
-    removeSeam(in, width, height, out, leastImportantSeam);
+    removeSeam(inPixels, width, height, outPixels, leastImportantSeam);
 
     //free memories
     free(grayScalePixels);
@@ -280,17 +281,18 @@ void seamCarvingOnHost(const uchar3 *in, int width, int height, uchar3 *out, int
 }
 
 //-----------------------------------------------------Hàm kernel------------------------------------------------------//
-__global__ void convertRgbToGrayKernel(uchar3 *in, int width, int height, int *out){
+//v2 bổ sung song song hàm getLeastImportanceSeamKernel có sử dụng smem
+__global__ void convertRgbToGrayKernel(uchar3 *inPixels, int width, int height, int *outPixels){
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (col < width && row < height){
         int idx = row * width + col;
-        out[idx] = 0.299f * in[idx].x + 0.587f * in[idx].y + 0.114f * in[idx].z;
+        outPixels[idx] = 0.299f * inPixels[idx].x + 0.587f * inPixels[idx].y + 0.114f * inPixels[idx].z;
     }
 }
 
-__global__ void getPixelsImportanceKernel (int *in, int width, int height, int filterWidth, int *out, int *xFilter, int *yFilter){
+__global__ void calPixelsImportanceKernel (int *inPixels, int width, int height, int filterWidth, int *outPixels, int *xFilter, int *yFilter){
     int col = blockDim.x * blockIdx.x + threadIdx.x;
     int row = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -306,17 +308,17 @@ __global__ void getPixelsImportanceKernel (int *in, int width, int height, int f
             int dy = min(height - 1, max(0, row + filterRow));
 
             int idx = dy * width + dx;
-            xSum += in[idx] * xFilter[filterIdx];
-            ySum += in[idx] * yFilter[filterIdx];
+            xSum += inPixels[idx] * xFilter[filterIdx];
+            ySum += inPixels[idx] * yFilter[filterIdx];
         }
         }
 
-        out[curIdx] = abs(xSum) + abs(ySum);
+        outPixels[curIdx] = abs(xSum) + abs(ySum);
 
     }
 }
 
-__global__ void getLeastImportantPixelsKernel (int *in, int width, int row, int *out){
+__global__ void getLeastImportancePixelsKernel (int *inPixels, int width, int row, int *outPixels){
     int col = threadIdx.x + blockDim.x * blockIdx.x;
 
     if (col < width){
@@ -331,13 +333,13 @@ __global__ void getLeastImportantPixelsKernel (int *in, int width, int row, int 
         int leftBelowIdx = below * width + leftCol;
         int rightBelowIdx = below * width + rightCol;
 
-        out[idx] = min(out[belowIdx], min(out[leftBelowIdx], out[rightBelowIdx])) + in[idx];
+        outPixels[idx] = min(outPixels[belowIdx], min(outPixels[leftBelowIdx], outPixels[rightBelowIdx])) + inPixels[idx];
 
     }
 }
 
 //Tìm seam có độ quan trọng nhỏ nhất trên device
-__global__ void getLeastImportantSeamKernel (int *in, int width, int *out){
+__global__ void getLeastImportanceSeamKernel (int *inPixels, int width, int *outPixels){
     extern __shared__ int s_mem[];
     int i = (blockDim.x * blockIdx.x + threadIdx.x) * 2;
     if (i < width)
@@ -349,7 +351,7 @@ __global__ void getLeastImportantSeamKernel (int *in, int width, int *out){
     for (int stride = 1; stride < 2 * blockDim.x; stride *= 2){
       if (threadIdx.x % stride == 0){
         if (i + stride < width){
-          if (in[s_mem[threadIdx.x]] > in[s_mem[threadIdx.x + stride]]){
+          if (inPixels[s_mem[threadIdx.x]] > inPixels[s_mem[threadIdx.x + stride]]){
             s_mem[threadIdx.x] = s_mem[threadIdx.x + stride];
           }
         }
@@ -358,38 +360,40 @@ __global__ void getLeastImportantSeamKernel (int *in, int width, int *out){
     }
   
     if (threadIdx.x == 0){
-      out[blockIdx.x] = s_mem[0];
+      outPixels[blockIdx.x] = s_mem[0];
     }
   }
 
-void seamCarvingOnDevice(const uchar3 *in, int width, int height, uchar3 *out, int *xFilter, int *yFilter, int filterWidth, dim3 blockSize){
+void seamCarvingOnDevice(const uchar3 *inPixels, int width, int height, uchar3 *outPixels, int *xFilter, int *yFilter, int filterWidth, dim3 blockSize){
     int lastRowIdx = (height - 1) * width;
     int rowGridSize = (width - 1) / blockSize.x + 1;
 
     size_t dataSize = width * height * sizeof(uchar3);
     size_t rowSize = width * sizeof(int);
     size_t grayScaleSize = width * height * sizeof(int);
-
+	int minColGridSize = (width - 1) / (2 * blockSize.x) + 1;
+	
     dim3 gridSize((width - 1) / blockSize.x + 1, (height - 1) / blockSize.y + 1);
 
     // allocate device memories
     uchar3 *d_in;
     size_t filterSize = filterWidth * filterWidth * sizeof(int);
-	  int * d_xFilter;
-	  int * d_yFilter;
-    int *d_grayScalePixels, *d_pixelsImportance, *d_leastImportantPixels;
+	int *d_xFilter, *d_yFilter, *d_grayScalePixels, *d_pixelsImportance, *d_leastImportantPixels, *d_minCol;
+	
     CHECK(cudaMalloc(&d_in, dataSize));
     CHECK(cudaMalloc(&d_xFilter, filterSize));
     CHECK(cudaMalloc(&d_yFilter, filterSize));
     CHECK(cudaMalloc(&d_grayScalePixels, grayScaleSize));
     CHECK(cudaMalloc(&d_pixelsImportance, grayScaleSize));
     CHECK(cudaMalloc(&d_leastImportantPixels, grayScaleSize));
+    CHECK(cudaMalloc(&d_minCol, minColGridSize * sizeof(int)));
 	
 	int *leastPixelsImportance = (int *)malloc(grayScaleSize);
     int *leastImportantSeam = (int *)malloc(height * sizeof(int));
+	int *minCol = (int *)malloc(minColGridSize * sizeof(int));
 
     //copy dữ liệu từ host vào device
-    CHECK(cudaMemcpy(d_in, in, dataSize, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(d_in, inPixels, dataSize, cudaMemcpyHostToDevice));
 	CHECK(cudaMemcpy(d_xFilter, xFilter, filterSize, cudaMemcpyHostToDevice));
 	CHECK(cudaMemcpy(d_yFilter, yFilter, filterSize, cudaMemcpyHostToDevice));
 
@@ -398,22 +402,31 @@ void seamCarvingOnDevice(const uchar3 *in, int width, int height, uchar3 *out, i
     CHECK(cudaGetLastError());
 
     //Thực hiện edge detection để lấy ra được độ quan trọng của pixels
-    getPixelsImportanceKernel<<<gridSize, blockSize>>>(d_grayScalePixels, width, height, filterWidth, d_pixelsImportance, d_xFilter, d_yFilter);
+    calPixelsImportanceKernel<<<gridSize, blockSize>>>(d_grayScalePixels, width, height, filterWidth, d_pixelsImportance, d_xFilter, d_yFilter);
     CHECK(cudaGetLastError());
 
     //Tìm pixels với độ quan trọng thấp nhất
     CHECK(cudaMemcpy(d_leastImportantPixels + lastRowIdx, d_pixelsImportance + lastRowIdx, rowSize, cudaMemcpyDeviceToDevice));
     for (int row = height - 2; row >= 0; row--){
-        getLeastImportantPixelsKernel<<<rowGridSize, blockSize.x>>>(d_pixelsImportance, width, row, d_leastImportantPixels);
+        getLeastImportancePixelsKernel<<<rowGridSize, blockSize.x>>>(d_pixelsImportance, width, row, d_leastImportantPixels);
         CHECK(cudaGetLastError());
     }
     CHECK(cudaMemcpy(leastPixelsImportance, d_leastImportantPixels, grayScaleSize, cudaMemcpyDeviceToHost));
     
     //Tìm seam có độ quan trọng thấp nhất
-    getLeastImportantSeam(leastPixelsImportance, width, height, leastImportantSeam);
-
+    //Chuyển thành song song từ v2
+	getLeastImportanceSeamKernel<<<minColGridSize, blockSize.x, blockSize.x * 2 * sizeof(int)>>>(d_leastImportantPixels, width, d_minCol);
+    CHECK(cudaGetLastError());
+    CHECK(cudaMemcpy(minCol, d_minCol, minColGridSize * sizeof(int), cudaMemcpyDeviceToHost));
+    int mc = minCol[0];
+    for (int i = 0; i < minColGridSize; i += 1){
+        if (leastPixelsImportance[minCol[i]] < leastPixelsImportance[mc]){
+            mc = minCol[i];
+        }
+    }
+	getSeam(leastPixelsImportance, width, height, leastImportantSeam, mc);
     //xóa seam 
-    removeSeam(in, width, height, out, leastImportantSeam);
+    removeSeam(inPixels, width, height, outPixels, leastImportantSeam);
 
     //free memories
     CHECK(cudaFree(d_in));
@@ -424,7 +437,7 @@ void seamCarvingOnDevice(const uchar3 *in, int width, int height, uchar3 *out, i
     free(leastImportantSeam);
 }
 
-void seamCarving(const uchar3 *in, int width, int height, uchar3 *out, int newWidth, int *xFilter, int *yFilter, int filterWidth, bool usingDevice=false, dim3 blockSize=dim3(1, 1)){
+void seamCarving(const uchar3 *inPixels, int width, int height, uchar3 *outPixels, int newWidth, int *xFilter, int *yFilter, int filterWidth, bool usingDevice=false, dim3 blockSize=dim3(1, 1)){
     if (usingDevice == false){
         printf("\nSeam carving by host\n");
     }
@@ -440,7 +453,7 @@ void seamCarving(const uchar3 *in, int width, int height, uchar3 *out, int newWi
     uchar3 *temp_out = (uchar3 *)malloc(width * height * sizeof(uchar3));
 
     //Chuyển dữ liệu từ in vào temp_in
-    memcpy(temp_in, in, width * height * sizeof(uchar3));
+    memcpy(temp_in, inPixels, width * height * sizeof(uchar3));
 
     //Thự hiện remove seam có độ quan trọng thấp nhất đến khi đạt được chiều rộng mong muốn
     for (int w = width; w > newWidth; w--){
@@ -462,7 +475,7 @@ void seamCarving(const uchar3 *in, int width, int height, uchar3 *out, int newWi
     }
 
     //Copy dữ liệu từ biến temp_in của vòng lặp cuối ra biến out để tiến hàng lưu file
-    memcpy(out, temp_in, newWidth * height * sizeof(uchar3));
+    memcpy(outPixels, temp_in, newWidth * height * sizeof(uchar3));
   
     timer.Stop();
     printf("Time: %.3f ms\n", timer.Eplapsed());
@@ -558,7 +571,8 @@ int main (int argc, char **argv){
     printError(correctOutPixels, outPixels, newWidth, height);
    
     // Write results to file
-    char *outFileNameBase = strtok(argv[1], ".");
+	//Lấy tên file theo kích thước mới
+    char *outFileNameBase = strtok(argv[2], ".");
     writePnm(correctOutPixels, newWidth, height, concatStr(outFileNameBase, "_host.pnm"));
     writePnm(outPixels, newWidth, height, concatStr(outFileNameBase, "_device.pnm"));
 
