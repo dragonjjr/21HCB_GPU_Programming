@@ -4,8 +4,6 @@
 #include <algorithm>
 
 #define FILTER_WIDTH 3
-__constant__ int dc_xFilter[FILTER_WIDTH * FILTER_WIDTH];
-__constant__ int dc_yFilter[FILTER_WIDTH * FILTER_WIDTH];
 
 #define CHECK(call){\
   const cudaError_t error = call;\
