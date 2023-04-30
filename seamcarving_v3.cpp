@@ -292,7 +292,7 @@ __global__ void convertRgbToGrayKernel(uchar3 *inPixels, int width, int height, 
     }
 }
 
-__global__ void calPixelsImportanceKernel (int *inPixels, int width, int height, int filterWidth, int *outPixels, int *xFilter, int *yFilter){
+__global__ void calPixelsImportanceKernel (int *inPixels, int width, int height, int filterWidth, int *outPixels){
     int col = blockDim.x * blockIdx.x + threadIdx.x;
     int row = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -377,12 +377,9 @@ void seamCarvingOnDevice(const uchar3 *inPixels, int width, int height, uchar3 *
 
     // allocate device memories
     uchar3 *d_in;
-    size_t filterSize = filterWidth * filterWidth * sizeof(int);
-	int *d_xFilter, *d_yFilter, *d_grayScalePixels, *d_pixelsImportance, *d_leastImportantPixels, *d_minCol;
+	int *d_grayScalePixels, *d_pixelsImportance, *d_leastImportantPixels, *d_minCol;
 	
     CHECK(cudaMalloc(&d_in, dataSize));
-    CHECK(cudaMalloc(&d_xFilter, filterSize));
-    CHECK(cudaMalloc(&d_yFilter, filterSize));
     CHECK(cudaMalloc(&d_grayScalePixels, grayScaleSize));
     CHECK(cudaMalloc(&d_pixelsImportance, grayScaleSize));
     CHECK(cudaMalloc(&d_leastImportantPixels, grayScaleSize));
@@ -394,15 +391,13 @@ void seamCarvingOnDevice(const uchar3 *inPixels, int width, int height, uchar3 *
 
     //copy dữ liệu từ host vào device
     CHECK(cudaMemcpy(d_in, inPixels, dataSize, cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(d_xFilter, xFilter, filterSize, cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(d_yFilter, yFilter, filterSize, cudaMemcpyHostToDevice));
 
     //Chuyển hình ảnh sang grayscale
     convertRgbToGrayKernel<<<gridSize, blockSize>>>(d_in, width, height, d_grayScalePixels);
     CHECK(cudaGetLastError());
 
     //Thực hiện edge detection để lấy ra được độ quan trọng của pixels
-    calPixelsImportanceKernel<<<gridSize, blockSize>>>(d_grayScalePixels, width, height, filterWidth, d_pixelsImportance, d_xFilter, d_yFilter);
+    calPixelsImportanceKernel<<<gridSize, blockSize>>>(d_grayScalePixels, width, height, filterWidth, d_pixelsImportance);
     CHECK(cudaGetLastError());
 
     //Tìm pixels với độ quan trọng thấp nhất
