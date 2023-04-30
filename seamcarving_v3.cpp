@@ -156,7 +156,7 @@ void convertRgbToGray (const uchar3 *inPixels, int n, int *outPixels){
 
 //-------------------------------------------------------Hàm trên host---------------------------------------------------------//
 //Tính độ quan trọng của Pixels
-void calPixelsImportance (int *inPixels, int width, int height, int filterWidth, int *outPixels){
+void calPixelsImportance (int *inPixels, int width, int height, int *xFilter, int *yFilter, int filterWidth, int *outPixels){
     int radius = filterWidth / 2;
     for (int col = 0; col < width; col++){
         for (int row = 0; row < height; row++){
@@ -172,8 +172,8 @@ void calPixelsImportance (int *inPixels, int width, int height, int filterWidth,
             int dy = min(height - 1, max(0, row + filterRow));
 
             int idx = dy * width + dx;
-            xSum += inPixels[idx] * dc_xFilter[filterIdx];
-            ySum += inPixels[idx] * dc_yFilter[filterIdx];
+            xSum += inPixels[idx] * xFilter[filterIdx];
+            ySum += inPixels[idx] * yFilter[filterIdx];
             }
         }
 
@@ -262,7 +262,7 @@ void seamCarvingOnHost(const uchar3 *inPixels, int width, int height, uchar3 *ou
 
     //Edge detection
     int *pixelsImportance = (int *)malloc(width * height * sizeof(int));
-    calPixelsImportance(grayScalePixels, width, height, filterWidth, pixelsImportance);
+    calPixelsImportance(grayScalePixels, width, height, xFilter, yFilter, filterWidth, pixelsImportance);
 
     //Tìm seam ít quan trọng nhất
     int *leastPixelsImportance = (int *)malloc(width * height * sizeof(int));
@@ -308,8 +308,8 @@ __global__ void calPixelsImportanceKernel (int *inPixels, int width, int height,
             int dy = min(height - 1, max(0, row + filterRow));
 
             int idx = dy * width + dx;
-            xSum += inPixels[idx] * xFilter[filterIdx];
-            ySum += inPixels[idx] * yFilter[filterIdx];
+            xSum += inPixels[idx] * dc_xFilter[filterIdx];
+            ySum += inPixels[idx] * dc_yFilter[filterIdx];
         }
         }
 
