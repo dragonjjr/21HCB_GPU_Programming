@@ -4,6 +4,8 @@
 #include <algorithm>
 
 #define FILTER_WIDTH 3
+__constant__ int dc_xFilter[FILTER_WIDTH * FILTER_WIDTH];
+__constant__ int dc_yFilter[FILTER_WIDTH * FILTER_WIDTH];
 
 #define CHECK(call){\
   const cudaError_t error = call;\
@@ -290,7 +292,7 @@ __global__ void convertRgbToGrayKernel(uchar3 *inPixels, int width, int height, 
     }
 }
 
-__global__ void calPixelsImportanceKernel (int *inPixels, int width, int height, int filterWidth, int *outPixels, int *xFilter, int *yFilter){
+__global__ void calPixelsImportanceKernel (int *inPixels, int width, int height, int filterWidth, int *outPixels){
     int col = blockDim.x * blockIdx.x + threadIdx.x;
     int row = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -306,8 +308,8 @@ __global__ void calPixelsImportanceKernel (int *inPixels, int width, int height,
             int dy = min(height - 1, max(0, row + filterRow));
 
             int idx = dy * width + dx;
-            xSum += inPixels[idx] * xFilter[filterIdx];
-            ySum += inPixels[idx] * yFilter[filterIdx];
+            xSum += inPixels[idx] * dc_xFilter[filterIdx];
+            ySum += inPixels[idx] * dc_yFilter[filterIdx];
         }
         }
 
@@ -375,12 +377,9 @@ void seamCarvingOnDevice(const uchar3 *inPixels, int width, int height, uchar3 *
 
     // allocate device memories
     uchar3 *d_in;
-    size_t filterSize = filterWidth * filterWidth * sizeof(int);
-	int *d_xFilter, *d_yFilter, *d_grayScalePixels, *d_pixelsImportance, *d_leastImportantPixels, *d_minCol;
+	int *d_grayScalePixels, *d_pixelsImportance, *d_leastImportantPixels, *d_minCol;
 	
     CHECK(cudaMalloc(&d_in, dataSize));
-    CHECK(cudaMalloc(&d_xFilter, filterSize));
-    CHECK(cudaMalloc(&d_yFilter, filterSize));
     CHECK(cudaMalloc(&d_grayScalePixels, grayScaleSize));
     CHECK(cudaMalloc(&d_pixelsImportance, grayScaleSize));
     CHECK(cudaMalloc(&d_leastImportantPixels, grayScaleSize));
@@ -392,15 +391,13 @@ void seamCarvingOnDevice(const uchar3 *inPixels, int width, int height, uchar3 *
 
     //copy dữ liệu từ host vào device
     CHECK(cudaMemcpy(d_in, inPixels, dataSize, cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(d_xFilter, xFilter, filterSize, cudaMemcpyHostToDevice));
-	CHECK(cudaMemcpy(d_yFilter, yFilter, filterSize, cudaMemcpyHostToDevice));
 
     //Chuyển hình ảnh sang grayscale
     convertRgbToGrayKernel<<<gridSize, blockSize>>>(d_in, width, height, d_grayScalePixels);
     CHECK(cudaGetLastError());
 
     //Thực hiện edge detection để lấy ra được độ quan trọng của pixels
-    calPixelsImportanceKernel<<<gridSize, blockSize>>>(d_grayScalePixels, width, height, filterWidth, d_pixelsImportance, d_xFilter, d_yFilter);
+    calPixelsImportanceKernel<<<gridSize, blockSize>>>(d_grayScalePixels, width, height, filterWidth, d_pixelsImportance);
     CHECK(cudaGetLastError());
 
     //Tìm pixels với độ quan trọng thấp nhất
@@ -441,6 +438,11 @@ void seamCarving(const uchar3 *inPixels, int width, int height, uchar3 *outPixel
     }
     else{
         printf("\nSeam carving by device\n");
+
+        // copy x filter, y filter on host to dc_x filter, dc_y filter on device
+        size_t filterSize = filterWidth * filterWidth * sizeof(int);
+        CHECK(cudaMemcpyToSymbol(dc_xFilter, xFilter, filterSize));
+        CHECK(cudaMemcpyToSymbol(dc_yFilter, yFilter, filterSize));
     }
 
     GpuTimer timer;
@@ -472,7 +474,7 @@ void seamCarving(const uchar3 *inPixels, int width, int height, uchar3 *outPixel
         temp_out = temp;
     }
 
-    //Copy dữ liệu từ biến temp_in của vòng lặp cuối ra biến out để tiến hàng lưu file
+    //Copy dữ liệu từ biến temp_in của vòng lặp cuối ra biến out để tiến hành lưu file
     memcpy(outPixels, temp_in, newWidth * height * sizeof(uchar3));
   
     timer.Stop();

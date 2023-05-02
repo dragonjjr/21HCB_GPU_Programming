@@ -433,7 +433,7 @@ void seamCarving(const uchar3 *inPixels, int width, int height, uchar3 *outPixel
         temp_out = temp;
     }
 
-    //Copy dữ liệu từ biến temp_in của vòng lặp cuối ra biến out để tiến hàng lưu file
+    //Copy dữ liệu từ biến temp_in của vòng lặp cuối ra biến out để tiến hành lưu file
     memcpy(outPixels, temp_in, newWidth * height * sizeof(uchar3));
   
     timer.Stop();
